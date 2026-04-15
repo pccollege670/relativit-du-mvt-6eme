@@ -1,0 +1,528 @@
+!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>La trajectoire du ballon</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #f0fdf4;
+            font-family: 'Comic Sans MS', cursive, sans-serif;
+            overflow-x: hidden;
+        }
+
+        .world {
+            position: relative;
+            width: 100%;
+            height: 400px;
+            background: linear-gradient(to bottom, #bae6fd 0%, #e0f2fe 100%);
+            border: 4px solid #1e293b;
+            border-radius: 24px;
+            overflow: hidden;
+        }
+
+        .ground {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 60px;
+            background: #4ade80;
+            border-top: 4px solid #166534;
+            z-index: 25;
+        }
+
+        #markers-container {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 60px;
+            z-index: 26;
+            pointer-events: none;
+        }
+
+        .marker {
+            position: absolute;
+            bottom: 10px;
+            width: 2px;
+            height: 20px;
+            background: #166534;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .marker-label {
+            font-size: 12px;
+            font-weight: bold;
+            color: #064e3b;
+            margin-top: 22px;
+        }
+
+        /* --- Design de la Caméra Réaliste --- */
+        .camera-pro {
+            position: absolute;
+            z-index: 100;
+            width: 50px;
+            height: 40px;
+            pointer-events: none;
+            transition: transform 0.2s ease-out, bottom 0.2s ease-out, left 0.2s ease-out;
+        }
+
+        .cam-body {
+            position: absolute;
+            width: 30px;
+            height: 20px;
+            background: #334155;
+            border-radius: 3px;
+            bottom: 15px;
+            left: 10px;
+        }
+
+        .cam-lens {
+            position: absolute;
+            width: 12px;
+            height: 14px;
+            background: #1e293b;
+            left: 38px;
+            bottom: 18px;
+            border-radius: 2px;
+        }
+
+        .cam-lens::after {
+            content: '';
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 50%;
+            top: 3px;
+            right: 2px;
+        }
+
+        .cam-reel {
+            position: absolute;
+            width: 14px;
+            height: 14px;
+            background: #475569;
+            border: 2px solid #1e293b;
+            border-radius: 50%;
+            top: 2px;
+        }
+        .reel-1 { left: 8px; }
+        .reel-2 { left: 22px; }
+
+        .cam-tripod {
+            position: absolute;
+            width: 2px;
+            height: 25px;
+            background: #1e293b;
+            bottom: -10px;
+            left: 24px;
+            display: none;
+        }
+        .cam-tripod::before, .cam-tripod::after {
+            content: '';
+            position: absolute;
+            width: 2px;
+            height: 25px;
+            background: #1e293b;
+            top: 0;
+            transform-origin: top center;
+        }
+        .cam-tripod::before { transform: rotate(20deg); }
+        .cam-tripod::after { transform: rotate(-20deg); }
+
+        .rec-light {
+            position: absolute;
+            width: 5px;
+            height: 5px;
+            background: #ef4444;
+            border-radius: 50%;
+            top: 22px;
+            left: 13px;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.2; }
+        }
+
+        /* --- Léa --- */
+        .gymnast-container {
+            position: absolute;
+            width: 60px;
+            height: 80px;
+            z-index: 40;
+            bottom: 60px; 
+        }
+
+        .body-part {
+            position: absolute;
+            background: #334155;
+            border-radius: 10px;
+            transition: transform 0.1s;
+        }
+
+        .head { width: 20px; height: 20px; background: #fdba74; border-radius: 50%; top: 0; left: 20px; }
+        .torso { width: 12px; height: 30px; background: #ec4899; top: 20px; left: 24px; border-radius: 5px; }
+        .arm { width: 6px; height: 25px; top: 25px; left: 27px; transform-origin: top center; }
+        .leg { width: 8px; height: 30px; top: 48px; left: 26px; transform-origin: top center; }
+
+        @keyframes run-arm-1 { 0%, 100% { transform: rotate(45deg); } 50% { transform: rotate(-45deg); } }
+        @keyframes run-arm-2 { 0%, 100% { transform: rotate(-45deg); } 50% { transform: rotate(45deg); } }
+        @keyframes run-leg-1 { 0%, 100% { transform: rotate(-30deg); } 50% { transform: rotate(30deg); } }
+        @keyframes run-leg-2 { 0%, 100% { transform: rotate(30deg); } 50% { transform: rotate(-30deg); } }
+
+        .running .arm1 { animation: run-arm-1 0.8s infinite; }
+        .running .arm2 { animation: run-arm-2 0.8s infinite; }
+        .running .leg1 { animation: run-leg-1 0.8s infinite; }
+        .running .leg2 { animation: run-leg-2 0.8s infinite; }
+
+        .arm-up { animation: none !important; transform: rotate(180deg) !important; }
+
+        #ball {
+            position: absolute;
+            font-size: 18px;
+            z-index: 50;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+            line-height: 1;
+        }
+
+        #scenery-layer {
+            position: absolute;
+            bottom: 60px;
+            width: 100%;
+            height: 100px;
+            z-index: 5;
+            pointer-events: none;
+        }
+
+        .scenery-item {
+            position: absolute;
+            bottom: 0;
+            font-size: 45px;
+            opacity: 0.4;
+        }
+
+        #trail-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 35;
+            pointer-events: none;
+        }
+
+        #trail-content {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .dot {
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            background: #ef4444;
+            border-radius: 50%;
+            transition: opacity 0.8s ease-in-out;
+        }
+
+        .faded {
+            opacity: 0.2;
+        }
+
+        .active-btn {
+            background-color: #166534 !important;
+            color: white !important;
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-4xl mx-auto text-center">
+        <h1 class="text-3xl font-bold text-green-800 mb-2">Relativité : Système de Prise de Vue</h1>
+        <p class="text-slate-600 mb-6 font-medium">Comparez la vision d'une caméra embarquée et d'une caméra fixe.</p>
+        
+        <div class="bg-white p-6 rounded-3xl shadow-xl border-t-8 border-green-500">
+            
+            <div class="flex flex-wrap justify-center gap-4 mb-6">
+                <button id="btnGym" class="px-6 py-3 bg-green-100 text-green-800 rounded-2xl font-bold shadow-md active-btn transition-all">
+                    📷 Caméra Embarquée (Léa)
+                </button>
+                <button id="btnSpec" class="px-6 py-3 bg-blue-100 text-blue-800 rounded-2xl font-bold shadow-md transition-all">
+                    🔭 Caméra sur Trépied (Sol)
+                </button>
+            </div>
+
+            <div class="world" id="container">
+                <!-- Décor dynamique -->
+                <div id="scenery-layer"></div>
+
+                <!-- Repères dynamiques -->
+                <div id="markers-container"></div>
+                
+                <!-- Caméra -->
+                <div id="camera" class="camera-pro">
+                    <div class="cam-reel reel-1"></div>
+                    <div class="cam-reel reel-2"></div>
+                    <div class="cam-body">
+                        <div class="rec-light" id="recLight"></div>
+                    </div>
+                    <div class="cam-lens"></div>
+                    <div class="cam-tripod" id="tripod"></div>
+                </div>
+
+                <!-- Tracé -->
+                <div id="trail-layer">
+                    <div id="trail-content"></div>
+                </div>
+
+                <!-- Léa -->
+                <div id="gymnast" class="gymnast-container running">
+                    <div class="body-part leg leg2"></div>
+                    <div class="body-part arm arm2"></div>
+                    <div class="body-part torso"></div>
+                    <div class="body-part head"></div>
+                    <div class="body-part leg leg1"></div>
+                    <div id="gymArm" class="body-part arm arm1"></div>
+                </div>
+
+                <!-- Ballon -->
+                <div id="ball">⚽</div>
+                
+                <div class="ground"></div>
+            </div>
+
+            <div class="mt-8 p-6 bg-slate-50 rounded-2xl border-2 border-slate-200 text-left">
+                <h3 id="explainTitle" class="font-bold text-xl mb-2 text-green-800">Observation</h3>
+                <p id="explainText" class="text-slate-700"></p>
+            </div>
+            
+            <button id="restartBtn" class="mt-6 px-10 py-3 bg-red-500 text-white rounded-full font-bold hover:bg-red-600 shadow-lg transition-transform active:scale-95">
+                Lancer l'enregistrement 🔄
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const gymnast = document.getElementById('gymnast');
+        const gymArm = document.getElementById('gymArm');
+        const ball = document.getElementById('ball');
+        const camera = document.getElementById('camera');
+        const tripod = document.getElementById('tripod');
+        const recLight = document.getElementById('recLight');
+        const sceneryLayer = document.getElementById('scenery-layer');
+        const markersLayer = document.getElementById('markers-container');
+        const trailContent = document.getElementById('trail-content');
+        const explainTitle = document.getElementById('explainTitle');
+        const explainText = document.getElementById('explainText');
+        const container = document.getElementById('container');
+        const restartBtn = document.getElementById('restartBtn');
+        
+        let mode = 'gym'; 
+        let time = 0;
+        let flightTime = 0; 
+        let isBallFlying = false;
+        let hasLaunched = false;
+        let isActive = true; 
+        let dots = []; 
+        
+        const config = {
+            runSpeed: 2.2,      
+            jumpPower: 6.8,     
+            gravity: 0.1,      
+            handYBase: 265,
+            handYUp: 235,
+            handOffsetX: 27
+        };
+
+        let startX, triggerX;
+
+        function initScenery() {
+            sceneryLayer.innerHTML = '';
+            markersLayer.innerHTML = '';
+            const items = ['🌳', '🏠', '🌳', '🏫', '🌳', '🏠'];
+            
+            for (let i = -10; i < 40; i++) {
+                if (i % 2 === 0) {
+                    const s = document.createElement('span');
+                    s.className = 'scenery-item';
+                    s.style.left = (i * 250) + 'px';
+                    s.innerText = items[Math.abs(i) % items.length];
+                    sceneryLayer.appendChild(s);
+                }
+                const m = document.createElement('div');
+                m.className = 'marker';
+                m.style.left = (i * 200) + 'px';
+                m.innerHTML = `<div class="marker-label">${i}m</div>`;
+                markersLayer.appendChild(m);
+            }
+        }
+
+        function resetAnimation() {
+            const containerWidth = container.offsetWidth;
+            const centerX = containerWidth / 2;
+
+            const framesToApex = config.jumpPower / config.gravity; 
+            const distToApex = framesToApex * config.runSpeed;
+            
+            triggerX = centerX - distToApex - config.handOffsetX;
+            startX = triggerX - (120 * config.runSpeed);
+
+            time = 0;
+            flightTime = 0;
+            isBallFlying = false;
+            hasLaunched = false;
+            isActive = true;
+            clearDots(); 
+            gymArm.classList.remove('arm-up');
+            gymnast.classList.add('running');
+            restartBtn.innerText = "Réinitialiser 🔄";
+            recLight.style.animation = "blink 1s infinite";
+            recLight.style.background = "#ef4444";
+        }
+
+        function fadeTrail() {
+            dots.forEach(dot => dot.classList.add('faded'));
+            recLight.style.animation = "none";
+            recLight.style.background = "#64748b";
+        }
+
+        document.getElementById('btnGym').onclick = () => { mode = 'gym'; updateUI(); resetAnimation(); };
+        document.getElementById('btnSpec').onclick = () => { mode = 'spec'; updateUI(); resetAnimation(); };
+        restartBtn.onclick = resetAnimation;
+
+        function updateUI() {
+            document.getElementById('btnGym').classList.toggle('active-btn', mode === 'gym');
+            document.getElementById('btnSpec').classList.toggle('active-btn', mode === 'spec');
+            tripod.style.display = (mode === 'spec') ? 'block' : 'none';
+            
+            if (mode === 'gym') {
+                explainTitle.innerText = "Référentiel : Caméra Embarquée";
+                explainTitle.className = "font-bold text-xl mb-2 text-green-800";
+                explainText.innerHTML = "Ici, la caméra avance avec Léa. Pour la caméra, Léa est <b>immobile</b> et c'est le <b>décor qui défile</b> vers l'arrière. Le ballon semble ne faire qu'un mouvement de haut en bas.";
+            } else {
+                explainTitle.innerText = "Référentiel : Caméra Fixe (Sol)";
+                explainTitle.className = "font-bold text-xl mb-2 text-blue-800";
+                explainText.innerHTML = "La caméra est posée au sol. Le décor est <b>fixe</b>. On voit Léa se déplacer. Le ballon avance en même temps qu'il monte et descend, formant une <b>parabole</b> centrée sur la caméra.";
+            }
+        }
+
+        function animate() {
+            if (isActive) {
+                time += 1;
+                const containerWidth = container.offsetWidth;
+                const centerX = containerWidth / 2;
+                const distance = time * config.runSpeed;
+                const currentXPos = startX + distance;
+
+                if (!hasLaunched && currentXPos >= triggerX) {
+                    isBallFlying = true;
+                    hasLaunched = true;
+                    flightTime = 0;
+                }
+
+                let currentBallY;
+                
+                if (isBallFlying) {
+                    flightTime += 1;
+                    const relativeY = (config.jumpPower * flightTime) - (0.5 * config.gravity * flightTime * flightTime);
+                    currentBallY = config.handYUp - relativeY;
+
+                    let isLanding = (flightTime > 40 && relativeY < 15);
+                    if (flightTime < 15 || isLanding) {
+                        gymArm.classList.add('arm-up');
+                    } else {
+                        gymArm.classList.remove('arm-up');
+                    }
+
+                    if (flightTime > 30 && currentBallY >= config.handYUp) {
+                        currentBallY = config.handYUp;
+                        isBallFlying = false;
+                        fadeTrail(); 
+                        isActive = false; 
+                        gymnast.classList.remove('running');
+                        restartBtn.innerText = "Relancer l'enregistrement 🔄";
+                    }
+                } else {
+                    gymArm.classList.remove('arm-up');
+                    currentBallY = config.handYBase + Math.sin(time * 0.15) * 5;
+                }
+
+                if (mode === 'spec') {
+                    // RÉFÉRENTIEL FIXE
+                    sceneryLayer.style.transform = "translateX(0)";
+                    markersLayer.style.transform = "translateX(0)";
+                    trailContent.style.transform = "translateX(0)";
+                    
+                    gymnast.style.left = currentXPos + "px";
+                    gymnast.style.transform = "none";
+                    
+                    camera.style.left = (centerX - 25) + "px";
+                    camera.style.bottom = "70px"; 
+                    camera.style.transform = "scale(1)";
+                    
+                    let ballX = currentXPos + config.handOffsetX;
+                    ball.style.left = ballX + "px";
+                    ball.style.top = currentBallY + "px";
+
+                    if (isBallFlying && flightTime % 2 === 0) {
+                        createDot(ballX + 9, currentBallY + 9);
+                    }
+                    
+                    if (currentXPos > containerWidth + 200) isActive = false;
+                } else {
+                    // RÉFÉRENTIEL MOBILE
+                    const scrollX = -distance + (centerX - startX);
+                    sceneryLayer.style.transform = `translateX(${scrollX}px)`;
+                    markersLayer.style.transform = `translateX(${scrollX}px)`;
+                    
+                    gymnast.style.left = centerX + "px";
+                    gymnast.style.transform = "translateX(-50%)";
+
+                    // Caméra sur la tête : posée sur le sommet du cercle
+                    camera.style.left = (centerX - 35) + "px";
+                    camera.style.bottom = "125px"; // Ajusté pour toucher la tête (60px sol + 65px hauteur tête avec le scale)
+                    camera.style.transform = "scale(0.75)";
+
+                    let ballX_screen = (centerX - 30) + config.handOffsetX;
+                    ball.style.left = ballX_screen + "px";
+                    ball.style.top = currentBallY + "px";
+
+                    if (isBallFlying && flightTime % 2 === 0) {
+                        createDot(ballX_screen + 9, currentBallY + 9);
+                    }
+                }
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        function createDot(x, y) {
+            const dot = document.createElement('div');
+            dot.className = 'dot';
+            dot.style.left = x + 'px';
+            dot.style.top = y + 'px';
+            trailContent.appendChild(dot);
+            dots.push(dot);
+        }
+
+        function clearDots() {
+            dots.forEach(dot => dot.remove());
+            dots = [];
+        }
+
+        initScenery();
+        resetAnimation(); 
+        updateUI();
+        animate();
+    </script>
+</body>
+</html>
